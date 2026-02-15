@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cq Group Averager</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <!-- Excel import/export -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+
+<body class="bg-slate-50 text-slate-900">
+<div class="max-w-6xl mx-auto p-4 space-y-4">
+
+  <div>
+    <h1 class="text-lg font-bold">Cq Group Averager</h1>
+ 
+  </div>
+
+  <!-- Controls -->
+  <div class="bg-white border rounded-xl p-4">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+   
+      <div class="flex items-center gap-3">
+        <input id="file" type="file" accept=".xlsx" class="text-sm" />
+        <button id="clearAll" class="px-3 py-2 rounded-lg border text-sm">Clear plate</button>
+      </div>
+    </div>
+    <div class="text-xs text-slate-500 mt-2">
+      Excel must contain Well and Cq.
+    </div>
+  </div>
+
+  <!-- PLATE + RESULTS -->
+  <div class="grid gap-4 md:grid-cols-2">
+
+    <!-- Plate -->
+    <div class="bg-white border rounded-xl p-4 space-y-2">
+      <div class="font-semibold">Plate (A–H × 1–12)</div>
+      <div class="overflow-auto border rounded-lg">
+        <table id="plate" class="min-w-[920px] w-full text-sm"></table>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="bg-white border rounded-xl p-4 space-y-2">
+      <div class="flex items-center justify-between gap-3">
+        <div class="font-semibold">Results</div>
+        <button id="download" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm">
+          Download .xlsx
+        </button>
+      </div>
+
+      <div class="overflow-auto border rounded-lg">
+        <table class="min-w-[520px] w-full text-sm" id="results">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="text-left px-3 py-2">Group</th>
+              <th class="text-left px-3 py-2">N</th>
+              <th class="text-left px-3 py-2">Mean</th>
+              <th class="text-left px-3 py-2">SD</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="text-xs text-slate-500">
+        Only wells with a group name + a Cq value are used.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const ROWS = ["A","B","C","D","E","F","G","H"];
+  const COLS = Array.from({length:12}, (_,i)=>String(i+1));
+
+  // Data
+  const cqMap = new Map();      // well -> cq
+  const groupMap = new Map();   // well -> group
+  let lastResults = [];         // for export
+
+  const W = x => String(x||"").trim().toUpperCase().replace(/\s+/g,"");
+  const G = x => String(x||"").trim();
+  const num = x => Number(String(x||"").trim().replace(",","."));
+  const fmt = x => Number.isFinite(x) ? (Math.round(x*1000)/1000).toFixed(3) : "";
+  const mean = a => a.reduce((s,x)=>s+x,0)/a.length;
+  const sd = a => {
+    if (a.length < 2) return NaN;
+    const m = mean(a);
+    return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1));
+  };
+
+  // ---- Plate ----
+  function buildPlate(){
+    const t = document.getElementById("plate");
+    t.innerHTML = "";
+
+    const thead = document.createElement("thead");
+    thead.className = "bg-slate-100";
+    const hr = document.createElement("tr");
+
+    hr.innerHTML =
+      `<th class="sticky left-0 bg-slate-100 px-3 py-2"></th>` +
+      COLS.map(c=>`<th class="sticky top-0 bg-slate-100 px-3 py-2 text-left">${c}</th>`).join("");
+
+    thead.appendChild(hr);
+    t.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+
+    for (const r of ROWS){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<th class="sticky left-0 bg-white border-t px-3 py-2 text-left font-semibold">${r}</th>`;
+
+      for (const c of COLS){
+        const well = r+c;
+        const td = document.createElement("td");
+        td.className = "border-t px-2 py-2 align-top";
+
+        td.innerHTML = `
+          <div class="grid gap-1">
+            <input
+              data-well="${well}"
+              class="cq w-full border rounded-md px-2 py-1 font-mono text-sm"
+              placeholder="Cq"
+            >
+            <input
+              data-well="${well}"
+              class="grp w-full border rounded-md px-2 py-1 font-mono text-sm"
+              placeholder="group"
+            >
+          </div>
+        `;
+
+        // Cq typing
+        td.querySelector(".cq").addEventListener("input", (e)=>{
+          const w = e.target.dataset.well;
+          const v = num(e.target.value);
+          if (Number.isFinite(v)) cqMap.set(w, v);
+          else cqMap.delete(w);
+          updateResults();
+        });
+
+        // Group typing
+        td.querySelector(".grp").addEventListener("input", (e)=>{
+          const w = e.target.dataset.well;
+          const g = G(e.target.value);
+          if (g) groupMap.set(w, g);
+          else groupMap.delete(w);
+          updateResults();
+        });
+
+        tr.appendChild(td);
+      }
+
+      tbody.appendChild(tr);
+    }
+
+    t.appendChild(tbody);
+  }
+
+  // Fill plate inputs from cqMap/groupMap
+  function syncPlateInputs(){
+    document.querySelectorAll(".cq").forEach(inp=>{
+      const w = inp.dataset.well;
+      const v = cqMap.get(w);
+      inp.value = Number.isFinite(v) ? fmt(v) : "";
+    });
+
+    document.querySelectorAll(".grp").forEach(inp=>{
+      const w = inp.dataset.well;
+      inp.value = groupMap.get(w) || "";
+    });
+  }
+
+  // ---- Results ----
+  function updateResults(){
+    const by = new Map(); // group -> values[]
+
+    for (const [well, group] of groupMap.entries()){
+      const cq = cqMap.get(well);
+      if (!Number.isFinite(cq)) continue;
+      if (!by.has(group)) by.set(group, []);
+      by.get(group).push(cq);
+    }
+
+    const groups = [...by.keys()].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
+
+    lastResults = groups.map(g=>{
+      const vals = by.get(g);
+      return { Group:g, N:vals.length, Mean:mean(vals), SD:sd(vals) };
+    });
+
+    const tbody = document.querySelector("#results tbody");
+    tbody.innerHTML = "";
+
+    lastResults.forEach(r=>{
+      const tr = document.createElement("tr");
+      tr.className = "border-t";
+      tr.innerHTML = `
+        <td class="px-3 py-2">${r.Group}</td>
+        <td class="px-3 py-2">${r.N}</td>
+        <td class="px-3 py-2">${fmt(r.Mean)}</td>
+        <td class="px-3 py-2">${r.N>1 ? fmt(r.SD) : ""}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---- Clear ----
+  document.getElementById("clearAll").onclick = ()=>{
+    cqMap.clear();
+    groupMap.clear();
+    syncPlateInputs();
+    updateResults();
+  };
+
+  // ---- Excel import ----
+  document.getElementById("file").addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0];
+    if (!f) return;
+
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf,{type:"array"});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+
+    // find header row with Well + Cq
+    let hi=-1,wc=-1,cc=-1;
+    for (let i=0;i<Math.min(rows.length,25);i++){
+      const r = rows[i].map(x=>String(x||"").trim().toLowerCase());
+      wc = r.indexOf("well");
+      cc = r.indexOf("cq");
+      if (wc!==-1 && cc!==-1){ hi=i; break; }
+    }
+    if (hi===-1){
+      alert("Excel must contain headers: Well and Cq");
+      e.target.value="";
+      return;
+    }
+
+    // Load values into cqMap (does not touch groups)
+    rows.slice(hi+1).forEach(r=>{
+      const well = W(r[wc]);
+      const cq = num(r[cc]);
+      if (!well) return;
+      if (Number.isFinite(cq)) cqMap.set(well, cq);
+    });
+
+    syncPlateInputs();
+    updateResults();
+    e.target.value="";
+  });
+
+  // ---- Export (Results only) ----
+  document.getElementById("download").onclick = ()=>{
+    const rows = lastResults.length ? lastResults.map(r=>({
+      Group: r.Group,
+      N: r.N,
+      MeanCq: r.Mean,
+      SD: (r.N>1 ? r.SD : "")
+    })) : [{Group:"",N:"",MeanCq:"",SD:""}];
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Results");
+    XLSX.writeFile(wb, "cq_results.xlsx");
+  };
+
+  // ---- Init ----
+  buildPlate();
+  syncPlateInputs();
+  updateResults();
+</script>
+</body>
+</html>
