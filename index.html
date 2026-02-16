@@ -12,63 +12,61 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 
-<body class="bg-slate-50 text-slate-900">
+<body class="bg-gradient-to-br from-rose-50 via-sky-50 to-emerald-50 text-slate-900">
 <div class="max-w-6xl mx-auto p-4 space-y-4">
 
-  <div>
-    <h1 class="text-lg font-bold">Cq Group Averager</h1>
- 
-  </div>
-
   <!-- Controls -->
-  <div class="bg-white border rounded-xl p-4">
+  <div class="bg-white/70 backdrop-blur border border-white/70 rounded-2xl p-4">
     <div class="flex items-center justify-between gap-3 flex-wrap">
-   
       <div class="flex items-center gap-3">
-        <input id="file" type="file" accept=".xlsx" class="text-sm" />
-        <button id="clearAll" class="px-3 py-2 rounded-lg border text-sm">Clear plate</button>
+        <input id="file" type="file" accept=".xlsx"
+               class="text-sm file:mr-3 file:rounded-xl file:border-0 file:px-3 file:py-2
+                      file:bg-violet-100 file:text-violet-900 hover:file:bg-violet-200" />
+        <button id="clearAll"
+                class="px-3 py-2 rounded-xl border border-rose-200 bg-rose-100/70 text-rose-900 text-sm hover:bg-rose-200/70">
+          Clear plate
+        </button>
       </div>
     </div>
-    <div class="text-xs text-slate-500 mt-2">
-      Excel must contain Well and Cq.
+    <div class="text-xs text-slate-600 mt-2">
+      Excel must contain Well and Cq
     </div>
   </div>
 
-  <!-- PLATE + RESULTS -->
-  <div class="grid gap-4 md:grid-cols-2">
+  <!-- PLATE + RESULTS (always stacked) -->
+  <div class="grid gap-4">
 
     <!-- Plate -->
-    <div class="bg-white border rounded-xl p-4 space-y-2">
-      <div class="font-semibold">Plate (A–H × 1–12)</div>
-      <div class="overflow-auto border rounded-lg">
+    <div class="bg-white/70 backdrop-blur border border-white/70 rounded-2xl p-4 space-y-2">
+      <div class="font-semibold text-slate-800">Plate (A–H × 1–12)</div>
+      <div class="overflow-auto border border-sky-100 rounded-xl bg-white/60">
         <table id="plate" class="min-w-[920px] w-full text-sm"></table>
       </div>
     </div>
 
     <!-- Results -->
-    <div class="bg-white border rounded-xl p-4 space-y-2">
+    <div class="bg-white/70 backdrop-blur border border-white/70 rounded-2xl p-4 space-y-2">
       <div class="flex items-center justify-between gap-3">
-        <div class="font-semibold">Results</div>
-        <button id="download" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm">
+        <div class="font-semibold text-slate-800">Results</div>
+        <button id="download"
+                class="px-3 py-2 rounded-xl bg-sky-200/80 text-sky-950 text-sm hover:bg-sky-300/80 border border-sky-200">
           Download .xlsx
         </button>
       </div>
 
-      <div class="overflow-auto border rounded-lg">
+      <div class="overflow-auto border border-emerald-100 rounded-xl bg-white/60">
         <table class="min-w-[520px] w-full text-sm" id="results">
-          <thead class="bg-slate-100">
+          <thead class="bg-emerald-50/80">
             <tr>
               <th class="text-left px-3 py-2">Group</th>
-              <th class="text-left px-3 py-2">N</th>
               <th class="text-left px-3 py-2">Mean</th>
-              <th class="text-left px-3 py-2">SD</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
 
-      <div class="text-xs text-slate-500">
+      <div class="text-xs text-slate-600">
         Only wells with a group name + a Cq value are used.
       </div>
     </div>
@@ -90,11 +88,6 @@
   const num = x => Number(String(x||"").trim().replace(",","."));
   const fmt = x => Number.isFinite(x) ? (Math.round(x*1000)/1000).toFixed(3) : "";
   const mean = a => a.reduce((s,x)=>s+x,0)/a.length;
-  const sd = a => {
-    if (a.length < 2) return NaN;
-    const m = mean(a);
-    return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1));
-  };
 
   // ---- Plate ----
   function buildPlate(){
@@ -102,12 +95,12 @@
     t.innerHTML = "";
 
     const thead = document.createElement("thead");
-    thead.className = "bg-slate-100";
+    thead.className = "bg-violet-50/80";
     const hr = document.createElement("tr");
 
     hr.innerHTML =
-      `<th class="sticky left-0 bg-slate-100 px-3 py-2"></th>` +
-      COLS.map(c=>`<th class="sticky top-0 bg-slate-100 px-3 py-2 text-left">${c}</th>`).join("");
+      `<th class="sticky left-0 bg-violet-50/80 px-3 py-2"></th>` +
+      COLS.map(c=>`<th class="sticky top-0 bg-violet-50/80 px-3 py-2 text-left text-slate-700">${c}</th>`).join("");
 
     thead.appendChild(hr);
     t.appendChild(thead);
@@ -116,23 +109,25 @@
 
     for (const r of ROWS){
       const tr = document.createElement("tr");
-      tr.innerHTML = `<th class="sticky left-0 bg-white border-t px-3 py-2 text-left font-semibold">${r}</th>`;
+      tr.innerHTML = `<th class="sticky left-0 bg-white/70 border-t border-sky-100 px-3 py-2 text-left font-semibold text-slate-700">${r}</th>`;
 
       for (const c of COLS){
         const well = r+c;
         const td = document.createElement("td");
-        td.className = "border-t px-2 py-2 align-top";
+        td.className = "border-t border-sky-100 px-2 py-2 align-top";
 
         td.innerHTML = `
           <div class="grid gap-1">
             <input
               data-well="${well}"
-              class="cq w-full border rounded-md px-2 py-1 font-mono text-sm"
+              class="cq w-full border border-sky-100 bg-white/80 rounded-xl px-2 py-1 font-mono text-sm
+                     focus:outline-none focus:ring-2 focus:ring-sky-200"
               placeholder="Cq"
             >
             <input
               data-well="${well}"
-              class="grp w-full border rounded-md px-2 py-1 font-mono text-sm"
+              class="grp w-full border border-rose-100 bg-white/80 rounded-xl px-2 py-1 font-mono text-sm
+                     focus:outline-none focus:ring-2 focus:ring-rose-200"
               placeholder="group"
             >
           </div>
@@ -194,7 +189,7 @@
 
     lastResults = groups.map(g=>{
       const vals = by.get(g);
-      return { Group:g, N:vals.length, Mean:mean(vals), SD:sd(vals) };
+      return { Group:g, Mean:mean(vals) };
     });
 
     const tbody = document.querySelector("#results tbody");
@@ -202,12 +197,10 @@
 
     lastResults.forEach(r=>{
       const tr = document.createElement("tr");
-      tr.className = "border-t";
+      tr.className = "border-t border-emerald-100";
       tr.innerHTML = `
         <td class="px-3 py-2">${r.Group}</td>
-        <td class="px-3 py-2">${r.N}</td>
         <td class="px-3 py-2">${fmt(r.Mean)}</td>
-        <td class="px-3 py-2">${r.N>1 ? fmt(r.SD) : ""}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -262,10 +255,8 @@
   document.getElementById("download").onclick = ()=>{
     const rows = lastResults.length ? lastResults.map(r=>({
       Group: r.Group,
-      N: r.N,
-      MeanCq: r.Mean,
-      SD: (r.N>1 ? r.SD : "")
-    })) : [{Group:"",N:"",MeanCq:"",SD:""}];
+      MeanCq: r.Mean
+    })) : [{Group:"",MeanCq:""}];
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
